@@ -2,29 +2,39 @@
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract GameContract is Ownable {
+contract GameContract is Ownable, ReentrancyGuard {
     // Structs
     struct Game {
         bool isBoosted;
         uint256 gameScore;
         uint256 gameId;
+        bool exists;
     }
 
     // State variables
-    mapping(address => Game[]) public playerGames;
+    mapping(address => mapping(uint256 => Game)) public playerGames;
 
     // Events
     event GameEntered(
         address indexed player,
         uint256 indexed gameId,
+        bool isBoosted,
         uint256 timestamp
     );
+
     event GameOver(
         address indexed player,
         uint256 indexed gameId,
-        uint256 score
+        uint256 score,
+        bool wasBoosted
     );
+
+    // Errors
+    error ZeroAddressNotAllowed();
+    error GameAlreadyExists();
+    error GameDoesNotExist();
 
     /**
      * @dev Allows owner to enter a new game
@@ -36,16 +46,20 @@ contract GameContract is Ownable {
         address player,
         bool _isBoosted,
         uint256 _gameId
-    ) external onlyOwner {
+    ) external onlyOwner nonReentrant {
+        if (player == address(0)) revert ZeroAddressNotAllowed();
+        if (playerGames[player][_gameId].exists) revert GameAlreadyExists();
+
         Game memory newGame = Game({
             isBoosted: _isBoosted,
             gameScore: 0,
-            gameId: _gameId
+            gameId: _gameId,
+            exists: true
         });
 
-        playerGames[player].push(newGame);
+        playerGames[player][_gameId] = newGame;
 
-        emit GameEntered(player, _gameId, block.timestamp);
+        emit GameEntered(player, _gameId, _isBoosted, block.timestamp);
     }
 
     /**
@@ -58,12 +72,17 @@ contract GameContract is Ownable {
         address player,
         uint256 gameId,
         uint256 _finalScore
-    ) external onlyOwner {
+    ) external onlyOwner nonReentrant {
+        if (player == address(0)) revert ZeroAddressNotAllowed();
+        if (!playerGames[player][gameId].exists) revert GameDoesNotExist();
+
         Game storage game = playerGames[player][gameId];
+        bool wasBoosted = game.isBoosted;
+
         game.gameScore = _finalScore;
         game.isBoosted = false;
 
-        emit GameOver(player, gameId, _finalScore);
+        emit GameOver(player, gameId, _finalScore, wasBoosted);
     }
 
     /**
@@ -75,7 +94,7 @@ contract GameContract is Ownable {
         address player,
         uint256 gameId
     ) external view returns (bool) {
-        require(gameId < playerGames[player].length, "Game does not exist");
+        if (!playerGames[player][gameId].exists) revert GameDoesNotExist();
         return playerGames[player][gameId].isBoosted;
     }
 
@@ -88,7 +107,7 @@ contract GameContract is Ownable {
         address player,
         uint256 gameId
     ) external view returns (uint256) {
-        require(gameId < playerGames[player].length, "Game does not exist");
+        if (!playerGames[player][gameId].exists) revert GameDoesNotExist();
         return playerGames[player][gameId].gameScore;
     }
 }
