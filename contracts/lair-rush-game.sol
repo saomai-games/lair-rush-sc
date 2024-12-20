@@ -59,8 +59,6 @@ contract GameContract is Ownable {
         uint256 gameId,
         uint256 _finalScore
     ) external onlyOwner {
-        require(gameId < playerGames[player].length, "Game does not exist");
-
         Game storage game = playerGames[player][gameId];
         game.gameScore = _finalScore;
         game.isBoosted = false;
