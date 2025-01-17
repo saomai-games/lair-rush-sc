@@ -5,6 +5,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 contract GameContract is Ownable, ReentrancyGuard {
+    enum CoinAction {
+        BUY,
+        EXCHANGE,
+        NFT
+    }
+
     // Structs
     struct Game {
         bool isBoosted;
@@ -13,8 +19,15 @@ contract GameContract is Ownable, ReentrancyGuard {
         bool exists;
     }
 
+    struct Coin {
+        CoinAction coinAction;
+        string to;
+        uint256 amount;
+    }
+
     // State variables
     mapping(address => mapping(uint256 => Game)) public playerGames;
+    mapping(address => Coin) playerCoins;
 
     // Events
     event GameEntered(
@@ -29,6 +42,14 @@ contract GameContract is Ownable, ReentrancyGuard {
         uint256 indexed gameId,
         uint256 score,
         bool wasBoosted
+    );
+
+    event CoinExchange(
+        address indexed player,
+        CoinAction indexed actionType,
+        string to,
+        uint256 amount,
+        uint256 timestamp
     );
 
     // Errors
@@ -109,5 +130,45 @@ contract GameContract is Ownable, ReentrancyGuard {
     ) external view returns (uint256) {
         if (!playerGames[player][gameId].exists) revert GameDoesNotExist();
         return playerGames[player][gameId].gameScore;
+    }
+
+    /**
+     * @dev Records a coin exchange transaction
+     * @param _player The address of the player exchanging coins
+     * @param _actionType The type of coin action
+     * @param _to The destination/purpose of the exchange
+     * @param _amount The amount of coins being exchanged
+     */
+    function recordCoinExchange(
+        address _player,
+        CoinAction _actionType,
+        string calldata _to,
+        uint256 _amount
+    ) external onlyOwner nonReentrant {
+        require(_player != address(0), "Zero address not allowed");
+        require(bytes(_to).length > 0, "Invalid destination");
+        require(_amount > 0, "Amount must be greater than 0");
+
+        // Record the exchange in playerCoins mapping
+        playerCoins[_player] = Coin({
+            coinAction: _actionType,
+            to: _to,
+            amount: _amount
+        });
+
+        // Emit the exchange event
+        emit CoinExchange(_player, _actionType, _to, _amount, block.timestamp);
+    }
+
+    /**
+     * @dev Retrieves the coin exchange details for a player
+     * @param _player The address of the player
+     */
+    function getCoinExchangeDetails(
+        address _player
+    ) external view returns (CoinAction, string memory, uint256) {
+        require(_player != address(0), "Zero address not allowed");
+        Coin memory playerCoin = playerCoins[_player];
+        return (playerCoin.coinAction, playerCoin.to, playerCoin.amount);
     }
 }
